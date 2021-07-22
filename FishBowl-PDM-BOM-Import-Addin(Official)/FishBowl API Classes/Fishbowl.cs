@@ -4,13 +4,14 @@ using System.Data;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace FishBowl_PDM_BOM_Import_Addin_Official_
 {
     /// <summary>
     /// Primary interaction class, wrap in a <see langword="using" /> statement to automatically log out and close the connection
     /// </summary>
-    public class Fishbowl : IDisposable
+    public class Fishbowl
     {
         private string _key = "";
 
@@ -207,7 +208,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
         /// <summary>
         /// Logs out and closes the connection
         /// </summary>
-        public void Dispose()
+        public async void Dispose()
         {
             dynamic cmd = new { LogoutRq = "" };
             cmd = BeginRequest(cmd);

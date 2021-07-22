@@ -130,6 +130,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             }
         }
 
+        //This is the meat and potatoes of the whole thing:
         private async void RunWholeImport()
         {
             ProgBar.MarqueeAnimationSpeed = 300;
@@ -273,9 +274,9 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             }
             #endregion
 
-            UpdateWindow.Text += "\r\nGathering material info";
-
             #region 3. Use PROD# to find CNC folder and count sheet materials inside
+
+            UpdateWindow.Text += "\r\nGathering material info";
 
             await Task.Run(() =>
             {
@@ -345,8 +346,6 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 }
             });
 
-            #endregion
-
             if (materialItems.Count > 0)
             {
                 CheckForDuplicates(materialItems);
@@ -357,146 +356,163 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 }
             }
 
+            #endregion
+
             #region 4. Connect to FishBowl
 
             UpdateWindow.Text += "\nConnecting to FishBowl, please wait";
 
             List<string[]> parts = new List<string[]>();
 
-            using (Fishbowl fishbowl = new Fishbowl(FBServer.Text, Convert.ToInt32(FBPort.Text), FBUsername.Text, FBPassword.Text))
-            {
-                int? statusCode = fishbowl.Connect();
+            Fishbowl fishbowl = new Fishbowl(FBServer.Text, Convert.ToInt32(FBPort.Text), FBUsername.Text, FBPassword.Text);
 
-                if (statusCode != null)
+            int? statusCode = await Task.Run(() => ConnectWithFishBowl(fishbowl));
+
+            if (statusCode != null)
+            {
+                UpdateWindow.Text += $"\r\nStatus Code: {statusCode}: {TranslateStatusCode(statusCode)}";
+            }
+            else
+            {
+                UpdateWindow.Text += $"\r\nStatus Code: {statusCode}: {TranslateStatusCode(statusCode)}";
+            }
+
+            #endregion
+
+            #region 5. Run query on parts in FishBowl
+
+            UpdateWindow.Text += "\r\nRunning query in FB";
+
+            string query = await Task.Run(() => ExecuteQueryInFishBowl(fishbowl));
+
+            string[] indParts = query.Split(new string[] { "\r\n " }, StringSplitOptions.RemoveEmptyEntries);
+
+            //string table = fishbowl.ConvertDataTableToCsv(query);
+            if (query == "")
+            {
+                Console.WriteLine("Returned nothing from the query");
+            }
+            else
+            {
+                foreach (string part in indParts)
                 {
-                    UpdateWindow.Text += $"\r\nStatus Code: {statusCode}: {TranslateStatusCode(statusCode)}";
-                }
-                else
-                {
-                    UpdateWindow.Text += $"\r\nStatus Code: {statusCode}: {TranslateStatusCode(statusCode)}";
+                    parts.Add(part.Trim().Trim('"').Split("\",\""));
                 }
 
                 #endregion
 
-                #region 5. Run query on parts in FishBowl
+                #region 6. Compare items found in the PDM to the FishBowl query
 
-                UpdateWindow.Text += "\r\nRunning query in FB";
+                List<VerifiedFishBowlItem> verifiedItems = new List<VerifiedFishBowlItem>();
 
-                string query = fishbowl.ExecuteQuery(query: "SELECT part.num AS Number, part.Description AS Description FROM part");
-
-                string[] indParts = query.Split(new string[] { "\r\n " }, StringSplitOptions.RemoveEmptyEntries);
-
-                //string table = fishbowl.ConvertDataTableToCsv(query);
-                if (query == "")
+                //I guess we're brute forcing this shit.
+                foreach (var part in parts)
                 {
-                    Console.WriteLine("Returned nothing from the query");
+                    if (purchasedItems.Count != 0)
+                    {
+                        foreach (var purchasedItem in purchasedItems)
+                        {
+                            if (part[0].Contains(purchasedItem.PartNo))
+                            {
+                                verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], purchasedItem.Quantity, "ea"));
+                                purchasedItems.Remove(purchasedItem);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                foreach (var part in parts)
+                {
+                    if (materialItems.Count != 0)
+                    {
+                        foreach (var materialItem in materialItems)
+                        {
+                            if (part[0].Contains(materialItem.PartNo))
+                            {
+                                verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], materialItem.Quantity, "SHT"));
+                                materialItems.Remove(materialItem);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (materialItems.Count != 0 || purchasedItems.Count != 0)
+                {
+                    UpdateWindow.Text += "\r\nSome items were not found in FB";
+                    if (materialItems.Count != 0)
+                    {
+                        foreach (var material in materialItems)
+                        {
+                            UpdateWindow.Text += $"\r\n{material.MaterialName}";
+                        }
+                    }
+                    else if (purchasedItems.Count != 0)
+                    {
+                        foreach (var item in purchasedItems)
+                        {
+                            UpdateWindow.Text += $"\r\n{item.PartNo}";
+                        }
+                    }
                 }
                 else
                 {
-                    foreach (string part in indParts)
+                    UpdateWindow.Text += "\r\nAll parts found in FB";
+                    foreach (var part in verifiedItems)
                     {
-                        parts.Add(part.Trim().Trim('"').Split("\",\""));
+                        BOMItemsWindow.Text += $"\r\n\r\n{part.PartNo} {part.Description} {part.Quantity} {part.UOM}";
                     }
-
-                    #endregion
-
-                    #region 6. Compare items found in the PDM to the FishBowl query
-
-                    List<VerifiedFishBowlItem> verifiedItems = new List<VerifiedFishBowlItem>();
-
-                    //I guess we're brute forcing this shit.
-                    foreach (var part in parts)
-                    {
-                        if (purchasedItems.Count != 0)
-                        {
-                            foreach (var purchasedItem in purchasedItems)
-                            {
-                                if (part[0].Contains(purchasedItem.PartNo))
-                                {
-                                    verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], purchasedItem.Quantity, "ea"));
-                                    purchasedItems.Remove(purchasedItem);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    foreach (var part in parts)
-                    {
-                        if (materialItems.Count != 0)
-                        {
-                            foreach (var materialItem in materialItems)
-                            {
-                                if (part[0].Contains(materialItem.PartNo))
-                                {
-                                    verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], materialItem.Quantity, "SHT"));
-                                    materialItems.Remove(materialItem);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (materialItems.Count != 0 || purchasedItems.Count != 0)
-                    {
-                        UpdateWindow.Text += "\r\nSome items were not found in FB";
-                        if(materialItems.Count != 0)
-                        {
-                            foreach (var material in materialItems)
-                            {
-                                UpdateWindow.Text += $"\r\n{material.MaterialName}";
-                            }
-                        }
-                        else if (purchasedItems.Count != 0)
-                        {
-                            foreach (var item in purchasedItems)
-                            {
-                                UpdateWindow.Text += $"\r\n{item.PartNo}";
-                            }
-                        }
-                    }
-                    else
-                    {
-                        UpdateWindow.Text += "\r\nAll parts found in FB";
-                        foreach(var part in verifiedItems)
-                        {
-                            BOMItemsWindow.Text += $"\r\n\r\n{part.PartNo} {part.Description} {part.Quantity} {part.UOM}";
-                        }
-                    }
-
-                    #endregion
-
-                    UpdateWindow.Text += "\r\nRunning Import, please wait";
-
-                    #region 7. Run the import
-
-                    prodNum = "PROD-" + prodNum;
-
-                    List<string> import = new List<string>();
-                    import.Add(@"""Flag"",""Number"",""Description"",""Active"",""Revision"",""CalendarCategory"",""AutoCreateType"",""QuickBooksClassName""");
-                    import.Add($"\"BOM\",\"{prodNum}\",\"{DescriptionBox.Text}\",\"True\",1,\"Order\",\"Never\",,");
-
-                    //"BOM'"
-
-
-                    //import.Add(@"""Flag"",""Description"",""Type"",""Part"",""Quantity"",""UOM""");
-                    foreach (var item in verifiedItems)
-                    {
-                        import.Add($"\"Item\",\"{DealWithDoubleQuotes(item.Description)}\",\"Raw Good\",\"{item.PartNo}\",{item.Quantity},\"{item.UOM}\",,,,,,,,,,,");
-                    }
-
-                    //There has to be at least one raw good and one finished good
-                    import.Add($"\"Item\",\"{prodNum}\",\"Finished Good\",\"{prodNum}\",1,\"ea\",,,,,,,,,,,");
-
-                    string bomImportStatus = fishbowl.Import("ImportBillOfMaterials", import);
-
-                    UpdateWindow.Text += $"\r\nImport status:{bomImportStatus}";
-
-                    #endregion
                 }
-            }
 
-            UpdateWindow.Text += "\r\nLooks like everything worked out fine here."; 
+                #endregion
+
+                #region 7. Run the import
+
+                UpdateWindow.Text += "\r\nRunning Import, please wait";
+
+                prodNum = "PROD-" + prodNum;
+
+                List<string> import = new List<string>();
+                import.Add(@"""Flag"",""Number"",""Description"",""Active"",""Revision"",""CalendarCategory"",""AutoCreateType"",""QuickBooksClassName""");
+                import.Add($"\"BOM\",\"{prodNum}\",\"{DescriptionBox.Text}\",\"True\",1,\"Order\",\"Never\",,");
+
+                //"BOM'"
+
+
+                //import.Add(@"""Flag"",""Description"",""Type"",""Part"",""Quantity"",""UOM""");
+                foreach (var item in verifiedItems)
+                {
+                    import.Add($"\"Item\",\"{DealWithDoubleQuotes(item.Description)}\",\"Raw Good\",\"{item.PartNo}\",{item.Quantity},\"{item.UOM}\",,,,,,,,,,,");
+                }
+
+                //There has to be at least one raw good and one finished good
+                import.Add($"\"Item\",\"{prodNum}\",\"Finished Good\",\"{prodNum}\",1,\"ea\",,,,,,,,,,,");
+
+                string bomImportStatus = await Task.Run(() => RunImportInFishBowl(fishbowl, import));
+
+                UpdateWindow.Text += $"\r\nImport status:{bomImportStatus}";
+
+                #endregion
+
+                #region Finish everything up
+
+                UpdateWindow.Text += "\r\nLogging out of FishBowl...";
+
+                //Log out of FishBowl
+                await Task.Run(() => fishbowl.Dispose());
+
+                if (bomImportStatus == "1000")
+                {
+                    UpdateWindow.Text += "\r\nHave a good day.";
+                }
+                else
+                {
+                    UpdateWindow.Text += $"\r\nSomething went weird somewhere. Check this out:\r\n{bomImportStatus}";
+                }
+
+                #endregion
+            }
         }
 
         private static string GetCncPath(string fullPath)
@@ -664,6 +680,21 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 if (item.PartNo == "0001") count++;
             }
             return count;
+        }
+        private static int? ConnectWithFishBowl(Fishbowl fishbowl)
+        {
+            int? statusCode = fishbowl.Connect();
+            return statusCode;
+        }
+        private static string ExecuteQueryInFishBowl(Fishbowl fishbowl)
+        {
+            string result = fishbowl.ExecuteQuery(query: "SELECT part.num AS Number, part.Description AS Description FROM part");
+            return result;
+        }
+        private static string RunImportInFishBowl(Fishbowl fishbowl, List<string> import)
+        {
+            string importResult = fishbowl.Import("ImportBillOfMaterials", import);
+            return importResult;
         }
         static string TranslateStatusCode(int? statusCode)
         {
