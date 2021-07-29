@@ -143,24 +143,14 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             UpdateWindow.Text = "";
             UpdateWindow.Text += "Logging into PDM";
 
-            #region Set up variables
-
             //For region 1
             bool loggedIn = false;
-            bool exceptionEncountered = false;
-
-            IEdmFile5 File;
-            IEdmReference5 Reference;
-            IEdmReference10 @ref;
 
             IEdmVault21 CurrentVault = new EdmVault5() as IEdmVault21;
-            IEdmSearch9 _search;
-            IEdmSearchResult5 _searchResult;
 
             //For region 2
-            List<PurchasedItem> purchasedItems = new List<PurchasedItem>();
             List<MaterialItem> materialItems = new List<MaterialItem>();
-            string temp = null;
+            List<PurchasedItem> purchasedItems = new List<PurchasedItem>();
 
             //For region 3
             string fullPath;
@@ -179,68 +169,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 return;
             }
 
-            _search = (IEdmSearch9)CurrentVault.CreateSearch2();
-            _search.FindFiles = true;
-
-            #endregion
-
-            await Task.Run(() =>
-            {
-                #region 1. Search PDM for PROD # based off of user input
-
-                _search.Clear();
-                _search.StartFolderID = CurrentVault.GetFolderFromPath("C:\\CreativeWorks").ID;
-
-                //_search.AddVariable("DocumentNumber", prodNum);
-                _search.FileName = "PROD-" + prodNum + ".sldasm";
-
-                _search.GetFirstResult();
-
-                if (exceptionEncountered)
-                {
-                    _searchResult = null;
-                }
-                else
-                {
-                    _searchResult = _search.GetFirstResult();
-                }
-
-                if (_searchResult == null)
-                {
-                    MessageBox.Show("Didn't find anything for the provided PROD number");
-                    return;
-                }
-                else
-                {
-                    fullPath = _searchResult.Path;
-                    cncPath = GetCncPath(fullPath);
-                }
-
-                #endregion
-
-                #region 2. Find hardware and populate Purchased Item object list
-
-                File = CurrentVault.GetFileFromPath(_searchResult.Path, out IEdmFolder5 ParentFolder);
-
-                Reference = (IEdmReference10)File.GetReferenceTree(ParentFolder.ID);
-
-                IEdmPos5 pos = Reference.GetFirstChildPosition("Get Some", true, true, 0);
-                //Console.WriteLine(pos.ToString());x 
-
-                string[] containsTerms = new string[] { "SB", "MFAB", "SLDASM", "PROD", "BEAU 25 PC Post", "3D Printed" };
-
-                while (!pos.IsNull)
-                {
-                    @ref = (IEdmReference10)Reference.GetNextChild(pos);
-                    if (!CheckForIgnorableTerms(@ref, containsTerms))
-                    {
-                        purchasedItems.Add(new PurchasedItem(GetPartNo(@ref.Name), @ref.RefCount));
-                    }
-                }
-
-                #endregion
-
-            });
+            await Task.Run(() => GetHardware(purchasedItems, CurrentVault, prodNum, true));
 
             #region Substep to make sure there are purchased items, and if not, whether the user wants to continue or not
 
@@ -282,15 +211,23 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
 
             UpdateWindow.Text += "\r\nGathering material info";
 
+            IEdmSearch9 _search;
+            IEdmSearchResult5 _searchResult;
+
+            _search = (IEdmSearch9)CurrentVault.CreateSearch2();
+            _search.FindFiles = true;
+
             await Task.Run(() =>
             {
                 _search.Clear();
                 _search.StartFolderID = CurrentVault.GetFolderFromPath("C:\\CreativeWorks").ID;
 
                 //_search.AddVariable("DocumentNumber", prodNum);
-                _search.FileName = "PROD-" + prodNum + ".sldasm";
+                _search.FileName = "PROD-" + prodNum + ".SLDASM";
 
                 _search.GetFirstResult();
+
+                bool exceptionEncountered = false;
 
                 if (exceptionEncountered)
                 {
@@ -321,33 +258,55 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
 
                 _searchResult = _search.GetFirstResult();
 
+                string tempPartNo = null;
+                string materialName;
+
+                List<string> partNumbers = new();
+
                 if (_searchResult != null && !_searchResult.Path.Contains("Parts"))
                 {
-                    temp = GetMaterialName(_searchResult.Name);
-                    materialItems.Add(new MaterialItem(temp, 1, GetMaterialPartNo(temp)));
+                    materialName = GetMaterialName(_searchResult.Name);
+                    partNumbers.Add(GetMaterialPartNo(materialName));
+                    materialItems.Add(new MaterialItem(materialName, 1, partNumbers[0]));
                 }
 
-                while (_searchResult != null)
+                do
                 {
                     _searchResult = _search.GetNextResult();
 
                     if (_searchResult != null && _searchResult.Path.Contains("Programs") && !_searchResult.Path.Contains("Parts") && !IsMultiPart(_searchResult.Name))
                     {
-                        if (GetMaterialName(_searchResult.Name) != temp)
+                        materialName = GetMaterialName(_searchResult.Name);
+                        tempPartNo = GetMaterialPartNo(materialName);
+
+                        bool found = false;
+                        foreach (var number in partNumbers)
                         {
-                            temp = GetMaterialName(_searchResult.Name);
-                            materialItems.Add(new MaterialItem(temp, 1, GetMaterialPartNo(temp)));
+                            if (number == tempPartNo)
+                            {
+                                for (int i = 0; i < materialItems.Count; i++)
+                                {
+                                    if (materialItems[i].PartNo == number)
+                                    {
+                                        materialItems[i].Quantity++;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (found) break;
                         }
-                        else
+                        if (!found)
                         {
-                            materialItems[materialItems.Count - 1].Quantity++;
+                            partNumbers.Add(tempPartNo);
+                            materialItems.Add(new MaterialItem(materialName, 1, tempPartNo));
                         }
                     }
                     else
                     {
                         continue;
                     }
-                }
+                } while (_searchResult != null);
             });
 
             if (materialItems.Count > 0)
@@ -443,9 +402,18 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                         {
                             if (part[0] == materialItem.PartNo)
                             {
-                                verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], materialItem.Quantity, "SHT"));
-                                materialItems.Remove(materialItem);
-                                break;
+                                if (part[0] == "6041" || part[0] == "6040" || part[0] == "0422442")
+                                {
+                                    verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], materialItem.Quantity, "ea"));
+                                    materialItems.Remove(materialItem);
+                                    break;
+                                }
+                                else
+                                {
+                                    verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], materialItem.Quantity, "SHT"));
+                                    materialItems.Remove(materialItem);
+                                    break;
+                                }
                             }
                         }
                     }
@@ -537,6 +505,82 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             }
         }
 
+        private static void GetHardware(List<PurchasedItem> purchasedItems, IEdmVault21 CurrentVault, string newProdNum, bool isProd)
+        {
+            IEdmFile5 File;
+            IEdmReference5 Reference;
+            IEdmReference10 @ref;
+
+            IEdmSearch9 _search;
+            IEdmSearchResult5 _searchResult;
+
+            _search = (IEdmSearch9)CurrentVault.CreateSearch2();
+            _search.FindFiles = true;
+
+            _search.Clear();
+            _search.StartFolderID = CurrentVault.GetFolderFromPath("C:\\CreativeWorks").ID;
+
+            //_search.AddVariable("DocumentNumber", prodNum);
+            if (isProd) _search.FileName = "PROD-" + newProdNum + ".SLDASM";
+            else _search.FileName = newProdNum + ".SLDASM";
+
+            _search.GetFirstResult();
+
+            bool exceptionEncountered = false;
+
+            if (exceptionEncountered)
+            {
+                _searchResult = null;
+            }
+            else
+            {
+                _searchResult = _search.GetFirstResult();
+            }
+
+            if (_searchResult == null)
+            {
+                MessageBox.Show($"Returned nothing for PROD-{newProdNum}");
+                return;
+            }
+
+            File = CurrentVault.GetFileFromPath(_searchResult.Path, out IEdmFolder5 ParentFolder);
+
+            Reference = (IEdmReference10)File.GetReferenceTree(ParentFolder.ID);
+
+            IEdmPos5 pos = Reference.GetFirstChildPosition("Get Some", true, true, 0);
+            //Console.WriteLine(pos.ToString());x 
+
+            string[] containsTerms = new string[] { "SB", "MFAB", "BEAU 25 PC Post", "3D Printed", "Multibody" };
+
+            while (!pos.IsNull)
+            {
+                @ref = (IEdmReference10)Reference.GetNextChild(pos);
+                if (!CheckForIgnorableTerms(@ref, containsTerms))
+                {
+                    if (@ref.Name.Contains("SLDASM"))
+                    {
+                        newProdNum = GetProdNum(@ref.Name);
+                        isProd = newProdNum.ToUpper().Contains("PROD") ? true : false;
+                        GetHardware(purchasedItems, CurrentVault, newProdNum, isProd);
+                    }
+                    else
+                    {
+                        if (!@ref.Name.ToUpper().Contains("PROD"))
+                        {
+                            purchasedItems.Add(new PurchasedItem(GetPartNo(@ref.Name), @ref.RefCount));
+                        }
+                    }
+                }
+            }
+        }
+
+        private static string GetProdNum(string name)
+        {
+            name = name.Replace("PROD-", "");
+            name = name.Replace(".SLDASM", "");
+            return name;
+        }
+
         private static string GetCncPath(string fullPath)
         {
             string cutPattern = @"1-Design Reference.+";
@@ -560,12 +604,14 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                     return "12760";
                 case "1-MDX 50":
                     return "0214003";
+                case "1-MDX 50 no Margin":
+                    return "0214003";
                 case "2-MDX 75":
                     return "222003";
                 case "3-Cheap Plywood 18mm (.7) ":
-                    return "518447";
+                    return "0422442";
                 case "NO MARGIN - Cheap Plywood 18mm (.7)":
-                    return "518447";
+                    return "0422442";
                 case "3mm Laminate":
                     return "Find out which laminate";
                 case "4- Birch Plywood 18mm (.7)":
@@ -627,7 +673,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 case "MDF 75 for 10' Board":
                     return "MDF 3/4";
                 case "MDX 75 NO MARGIN":
-                    return "MDF 3/4";
+                    return "222003";
                 case "Melamine-black 18mm":
                     return "922133";
                 case "Particle 6875":
@@ -746,12 +792,13 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             return result;
         }
 
-        private bool CheckForIgnorableTerms(IEdmReference10 @ref, string[] containsTerms)
+        private static bool CheckForIgnorableTerms(IEdmReference10 @ref, string[] containsTerms)
         {
             foreach(var term in containsTerms)
             {
                 if (@ref.Name.ToUpper().Contains(term.ToUpper())) return true;
             }
+            if (@ref.Name[@ref.Name.Length - 1] == '-') return true;
             return false;
         }
     }

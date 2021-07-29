@@ -75,7 +75,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             this.PRODBox.PlaceholderText = "####";
             this.PRODBox.Size = new System.Drawing.Size(73, 23);
             this.PRODBox.TabIndex = 1;
-            this.PRODBox.Text = "0616";
+            this.PRODBox.Text = "0317";
             // 
             // DescriptionBox
             // 
@@ -84,7 +84,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             this.DescriptionBox.PlaceholderText = "Write detailed description of PROD BOM here ";
             this.DescriptionBox.Size = new System.Drawing.Size(459, 23);
             this.DescriptionBox.TabIndex = 3;
-            this.DescriptionBox.Text = "Good Job";
+            this.DescriptionBox.Text = "Lucky Putt Hex Challenge";
             // 
             // label2
             // 

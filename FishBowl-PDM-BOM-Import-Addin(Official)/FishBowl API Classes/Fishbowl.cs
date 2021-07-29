@@ -77,10 +77,10 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             dynamic resp = JsonConvert.DeserializeObject(r);
             _key = resp.FbiJson.Ticket.Key;
 
-            if ((resp.FbiJson.FbiMsgsRs.statusCode != 1000 && resp.FbiJson.FbiMsgsRs.statusCode != 900) || String.IsNullOrWhiteSpace(_key))
-                throw new Exception("Login failed with status code " + resp.FbiJson.FbiMsgsRs.statusCode + (resp.FbiJson.FbiMsgsRs.statusMessage != null ? ": " + resp.FbiJson.FbiMsgsRs.statusMessage : ""));
-            if (resp.FbiJson.FbiMsgsRs.LoginRs.statusCode != 1000)
-                throw new Exception("Login Error " + resp.FbiJson.FbiMsgsRs.LoginRs.statusCode + ": " + resp.FbiJson.FbiMsgsRs.LoginRs.statusMessage.Value);
+            //if ((resp.FbiJson.FbiMsgsRs.statusCode != 1000 && resp.FbiJson.FbiMsgsRs.statusCode != 900) || String.IsNullOrWhiteSpace(_key))
+            //    throw new Exception("Login failed with status code " + resp.FbiJson.FbiMsgsRs.statusCode + (resp.FbiJson.FbiMsgsRs.statusMessage != null ? ": " + resp.FbiJson.FbiMsgsRs.statusMessage : ""));
+            //if (resp.FbiJson.FbiMsgsRs.LoginRs.statusCode != 1000)
+            //    throw new Exception("Login Error " + resp.FbiJson.FbiMsgsRs.LoginRs.statusCode + ": " + resp.FbiJson.FbiMsgsRs.LoginRs.statusMessage.Value);
 
             return resp.FbiJson.FbiMsgsRs.statusCode;
         }
