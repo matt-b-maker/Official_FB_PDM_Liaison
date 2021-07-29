@@ -208,7 +208,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
         /// <summary>
         /// Logs out and closes the connection
         /// </summary>
-        public async void Dispose()
+        public void Dispose()
         {
             dynamic cmd = new { LogoutRq = "" };
             cmd = BeginRequest(cmd);

@@ -38,6 +38,8 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
          */
         internal String sendCommand(string command)
         {
+            String response = "";
+            int timeoutCount = 1;
             try
             {
                 bw = new EndianBinaryWriter(new BigEndianBitConverter(), tcS);
@@ -46,14 +48,26 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 bw.Write(bytes.Length);
                 bw.Write(bytes);
                 bw.Flush();
-                Thread.Sleep(10000); // required for server to process before sending response
-                br = new EndianBinaryReader(new BigEndianBitConverter(), tcS);
-                int i = br.ReadInt32();
-                byte[] bytess = new byte[i];
-                br.Read(bytess, 0, i);
-                String response = encoding.GetString(bytess, 0, i);
+                while (response == "" && timeoutCount < 10)
+                {
+                    Thread.Sleep(1000); // required for server to process before sending response
+                    br = new EndianBinaryReader(new BigEndianBitConverter(), tcS);
+                    int i = br.ReadInt32();
+                    byte[] bytess = new byte[i];
+                    br.Read(bytess, 0, i);
+                    response = encoding.GetString(bytess, 0, i);
+                    timeoutCount++;
+                }
 
-                return response;
+                if (timeoutCount < 10)
+                {
+                    return response;
+                }
+                else
+                {
+                    response = "";
+                    return response;
+                }
             }
             catch (Exception ex)
             {

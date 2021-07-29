@@ -126,6 +126,8 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
 
             if (goodToGo)
             {
+                UpdateWindow.Text = "";
+                BOMItemsWindow.Text = "";
                 RunWholeImport();
             }
         }
@@ -225,10 +227,12 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 IEdmPos5 pos = Reference.GetFirstChildPosition("Get Some", true, true, 0);
                 //Console.WriteLine(pos.ToString());x 
 
+                string[] containsTerms = new string[] { "SB", "MFAB", "SLDASM", "PROD", "BEAU 25 PC Post", "3D Printed" };
+
                 while (!pos.IsNull)
                 {
                     @ref = (IEdmReference10)Reference.GetNextChild(pos);
-                    if (!@ref.Name.ToUpper().Contains("PROD") && !@ref.Name.ToUpper().Contains("MFAB"))
+                    if (!CheckForIgnorableTerms(@ref, containsTerms))
                     {
                         purchasedItems.Add(new PurchasedItem(GetPartNo(@ref.Name), @ref.RefCount));
                     }
@@ -354,6 +358,15 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 {
                     if (material.PartNo != "0001") BOMItemsWindow.Text += $"\r\n{material.PartNo} {material.Quantity}";
                 }
+
+                for (int i = 0; i < materialItems.Count; i++)
+                {
+                    if (materialItems[i].PartNo == "0001")
+                    {
+                        materialItems.RemoveAt(i);
+                        i--;
+                    }
+                }
             }
 
             #endregion
@@ -412,7 +425,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                     {
                         foreach (var purchasedItem in purchasedItems)
                         {
-                            if (part[0].Contains(purchasedItem.PartNo))
+                            if (part[0] == purchasedItem.PartNo)
                             {
                                 verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], purchasedItem.Quantity, "ea"));
                                 purchasedItems.Remove(purchasedItem);
@@ -428,7 +441,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                     {
                         foreach (var materialItem in materialItems)
                         {
-                            if (part[0].Contains(materialItem.PartNo))
+                            if (part[0] == materialItem.PartNo)
                             {
                                 verifiedItems.Add(new VerifiedFishBowlItem(part[0], part[1], materialItem.Quantity, "SHT"));
                                 materialItems.Remove(materialItem);
@@ -441,19 +454,26 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 if (materialItems.Count != 0 || purchasedItems.Count != 0)
                 {
                     UpdateWindow.Text += "\r\nSome items were not found in FB";
+                    BOMItemsWindow.Text += "\r\n\r\nParts not found in FishBowl: ";
                     if (materialItems.Count != 0)
                     {
                         foreach (var material in materialItems)
                         {
-                            UpdateWindow.Text += $"\r\n{material.MaterialName}";
+                            BOMItemsWindow.Text += $"\r\n{material.MaterialName}";
                         }
                     }
                     else if (purchasedItems.Count != 0)
                     {
                         foreach (var item in purchasedItems)
                         {
-                            UpdateWindow.Text += $"\r\n{item.PartNo}";
+                            BOMItemsWindow.Text += $"\r\n{item.PartNo}";
                         }
+                    }
+
+                    BOMItemsWindow.Text += "\r\n\r\nParts found in FishBowl: ";
+                    foreach (var part in verifiedItems)
+                    {
+                        BOMItemsWindow.Text += $"\r\n{part.PartNo} {part.Description} {part.Quantity} {part.UOM}";
                     }
                 }
                 else
@@ -491,7 +511,15 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
 
                 string bomImportStatus = await Task.Run(() => RunImportInFishBowl(fishbowl, import));
 
-                UpdateWindow.Text += $"\r\nImport status:{bomImportStatus}";
+                if (int.TryParse(bomImportStatus, out int a))
+                {
+                    UpdateWindow.Text += $"\r\nImport Status: {a}... That means it worked.";
+                    UpdateWindow.Text += "\r\nHave a good day.";
+                }
+                else
+                {
+                    UpdateWindow.Text += $"\r\nSomething went weird somewhere. Check this out:\r\n{bomImportStatus}";
+                }
 
                 #endregion
 
@@ -502,14 +530,8 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 //Log out of FishBowl
                 await Task.Run(() => fishbowl.Dispose());
 
-                if (bomImportStatus == "1000")
-                {
-                    UpdateWindow.Text += "\r\nHave a good day.";
-                }
-                else
-                {
-                    UpdateWindow.Text += $"\r\nSomething went weird somewhere. Check this out:\r\n{bomImportStatus}";
-                }
+                ProgBar.Value = 0;
+                ProgBar.MarqueeAnimationSpeed = 0;
 
                 #endregion
             }
@@ -525,7 +547,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
         private static string GetPartNo(string name)
         {
             string partNoPattern1 = @".SLDPRT";
-            string partNoPattern2 = @"[a-zA-Z0-9]+$";
+            string partNoPattern2 = @"[a-zA-Z0-9-\s#*()]+$";
             string partNo = Regex.Replace(name, partNoPattern1, "");
             partNo = Regex.Match(partNo, partNoPattern2).ToString();
             return partNo;
@@ -722,6 +744,15 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 }
             }
             return result;
+        }
+
+        private bool CheckForIgnorableTerms(IEdmReference10 @ref, string[] containsTerms)
+        {
+            foreach(var term in containsTerms)
+            {
+                if (@ref.Name.ToUpper().Contains(term.ToUpper())) return true;
+            }
+            return false;
         }
     }
 }
