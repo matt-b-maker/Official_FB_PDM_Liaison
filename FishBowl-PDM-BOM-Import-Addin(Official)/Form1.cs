@@ -135,6 +135,8 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
         //This is the meat and potatoes of the whole thing:
         private async void RunWholeImport()
         {
+            #region Set up initial variables and log into the PDM
+
             ProgBar.MarqueeAnimationSpeed = 300;
             ProgBar.Maximum = 100;
             ProgBar.Style = ProgressBarStyle.Marquee;
@@ -154,7 +156,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
 
             //For region 3
             string fullPath;
-            string cncPath;
+            string cncPath = null;
             string prodNum = PRODBox.Text;
 
             try
@@ -169,11 +171,15 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 return;
             }
 
-            await Task.Run(() => GetHardware(purchasedItems, CurrentVault, prodNum, true));
+            #endregion
 
             #region Substep to make sure there are purchased items, and if not, whether the user wants to continue or not
 
             if (loggedIn) UpdateWindow.Text += $"\r\nSuccessfully logged into PDM\nSearching for hardware";
+
+            await Task.Run(() => GetHardware(purchasedItems, CurrentVault, prodNum, true));
+
+            List<string> improperlyNamedFiles = new List<string>();
 
             if (loggedIn && purchasedItems.Count > 0)
             {
@@ -182,11 +188,30 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 {
                     if (item != purchasedItems[0])
                     {
-                        BOMItemsWindow.Text += $"\r\n{item.PartNo} {item.Quantity}";
+                        if (!item.CheckForProperName(item))
+                        {
+                            improperlyNamedFiles.Add(item.FileName);
+                            BOMItemsWindow.Text += $"\r\n{item.FileName} {item.Quantity}";
+                        }
+                        else
+                        {
+                            BOMItemsWindow.Text += $"\r\n{item.PartNo} {item.Quantity}";
+                        }
                     }
                     else
                     {
-                        BOMItemsWindow.Text += $"{item.PartNo} {item.Quantity}";
+                        if (!item.CheckForProperName(item))
+                        {
+                            BOMItemsWindow.Text += $"{item.FileName} {item.Quantity}";
+                            int index = BOMItemsWindow.Text.IndexOf(item.FileName);
+                            int length = item.FileName.Length;
+                            BOMItemsWindow.Select(index, length);
+                            BOMItemsWindow.SelectionColor = Color.Red;
+                        }
+                        else
+                        {
+                            BOMItemsWindow.Text += $"{item.PartNo} {item.Quantity}";
+                        }
                     }
                 }
             }
@@ -205,6 +230,19 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 ProgBar.Maximum = 0;
                 return;
             }
+
+            for (int i = 0; i < improperlyNamedFiles.Count; i++)
+            {
+                for (int j = 0; j < purchasedItems.Count; j++)
+                {
+                    if (improperlyNamedFiles[i] == purchasedItems[j].FileName)
+                    {
+                        purchasedItems.Remove(purchasedItems[j]);
+                        break;
+                    }
+                }
+            }
+
             #endregion
 
             #region 3. Use PROD# to find CNC folder and count sheet materials inside
@@ -249,6 +287,22 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                     cncPath = GetCncPath(fullPath);
                 }
 
+                List<Laminate> laminates = new List<Laminate>();
+
+                if (cncPath.Contains("LP\\GRP"))
+                {
+                    LaminateForm laminateForm = new LaminateForm();
+                    if (laminateForm.ShowDialog() == DialogResult.OK) laminates = laminateForm.laminates;
+                }
+
+                if (laminates.Count > 0)
+                {
+                    foreach (var laminate in laminates)
+                    {
+                        materialItems.Add(new MaterialItem(laminate.Type, laminate.Quantity, GetMaterialPartNo(laminate.Type)));
+                    }
+                }
+
                 _search.Clear();
                 _search.StartFolderID = CurrentVault.GetFolderFromPath(cncPath).ID;
 
@@ -274,7 +328,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 {
                     _searchResult = _search.GetNextResult();
 
-                    if (_searchResult != null && _searchResult.Path.Contains("Programs") && !_searchResult.Path.Contains("Parts") && !IsMultiPart(_searchResult.Name))
+                    if (_searchResult != null && _searchResult.Path.Contains("Programs") && !_searchResult.Path.Contains("Parts") && !_searchResult.Path.Contains("Laminate") && !IsMultiPart(_searchResult.Name))
                     {
                         materialName = GetMaterialName(_searchResult.Name);
                         tempPartNo = GetMaterialPartNo(materialName);
@@ -434,7 +488,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                     {
                         foreach (var item in purchasedItems)
                         {
-                            BOMItemsWindow.Text += $"\r\n{item.PartNo}";
+                            BOMItemsWindow.Text += $"\r\n{item.FileName}";
                         }
                     }
 
@@ -502,8 +556,20 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                 ProgBar.MarqueeAnimationSpeed = 0;
 
                 #endregion
+
+                foreach (var file in improperlyNamedFiles)
+                {
+                    WrongNamesBox.Text += $"\r\n{file}";
+
+                    int index = BOMItemsWindow.Text.IndexOf(file);
+                    int length = file.Length;
+                    BOMItemsWindow.Select(index, length);
+                    BOMItemsWindow.SelectionColor = Color.Red;
+                }
             }
         }
+
+        #region Methods
 
         private static void GetHardware(List<PurchasedItem> purchasedItems, IEdmVault21 CurrentVault, string newProdNum, bool isProd)
         {
@@ -567,20 +633,18 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
                     {
                         if (!@ref.Name.ToUpper().Contains("PROD"))
                         {
-                            purchasedItems.Add(new PurchasedItem(GetPartNo(@ref.Name), @ref.RefCount));
+                            purchasedItems.Add(new PurchasedItem(@ref.Name, GetPartNo(@ref.Name), @ref.RefCount));
                         }
                     }
                 }
             }
         }
-
         private static string GetProdNum(string name)
         {
             name = name.Replace("PROD-", "");
             name = name.Replace(".SLDASM", "");
             return name;
         }
-
         private static string GetCncPath(string fullPath)
         {
             string cutPattern = @"1-Design Reference.+";
@@ -600,6 +664,44 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
         {
             switch (temp)
             {
+                case "Xanadu":
+                    return "7945 - 18 - 350";
+                case "Walnut Heights":
+                    return "7965 - 12 - 350";
+                case "Violine":
+                    return "S-3055 - T - NF39";
+                case "Tutti Frutti":
+                    return "Y0026-60 - 372";
+                case "Pewter":
+                    return "D73-60 - 350";
+                case "Pearl Weave":
+                    return "5332";
+                case "Passionfruit":
+                    return "SR5240-T - NF39";
+                case "Oiled Soapstone":
+                    return "4882 - 38 - 350";
+                case "Midnight":
+                    return "D505-60 - 350";
+                case "Lemon Lime":
+                    return "Y0359-60 - 372";
+                case "Honey Plantain":
+                    return "S-4025 - T - NF39";
+                case "Hollyberry":
+                    return "d307 - 60 - 350";
+                case "Hibiscus Tea":
+                    return "Y0334-60 - 372";
+                case "Hibiscus":
+                    return "9224";
+                case "Classic Marbleized":
+                    return "Y0673-38 - 372";
+                case "Carribean Blue":
+                    return "S-3070 - T - NF39";
+                case "Capri":
+                    return "9225";
+                case "Brighton Walnut":
+                    return "7922 - 07 - 350";
+                case "Barrel Herringbone":
+                    return "y0591 - 60 - 372";
                 case "Celtec-black 50":
                     return "12760";
                 case "1-MDX 50":
@@ -791,7 +893,6 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             }
             return result;
         }
-
         private static bool CheckForIgnorableTerms(IEdmReference10 @ref, string[] containsTerms)
         {
             foreach(var term in containsTerms)
@@ -801,5 +902,7 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             if (@ref.Name[@ref.Name.Length - 1] == '-') return true;
             return false;
         }
+
+        #endregion
     }
 }

@@ -53,9 +53,11 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             this.FBPortLabel = new System.Windows.Forms.Label();
             this.FBServerLabel = new System.Windows.Forms.Label();
             this.UpdateWindow = new System.Windows.Forms.TextBox();
-            this.BOMItemsWindow = new System.Windows.Forms.TextBox();
             this.label7 = new System.Windows.Forms.Label();
             this.label8 = new System.Windows.Forms.Label();
+            this.BOMItemsWindow = new System.Windows.Forms.RichTextBox();
+            this.WrongNamesBox = new System.Windows.Forms.RichTextBox();
+            this.label9 = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
             // label1
@@ -284,18 +286,6 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             this.UpdateWindow.Size = new System.Drawing.Size(222, 299);
             this.UpdateWindow.TabIndex = 24;
             // 
-            // BOMItemsWindow
-            // 
-            this.BOMItemsWindow.Location = new System.Drawing.Point(571, 139);
-            this.BOMItemsWindow.MaximumSize = new System.Drawing.Size(330, 330);
-            this.BOMItemsWindow.MinimumSize = new System.Drawing.Size(150, 280);
-            this.BOMItemsWindow.Multiline = true;
-            this.BOMItemsWindow.Name = "BOMItemsWindow";
-            this.BOMItemsWindow.ReadOnly = true;
-            this.BOMItemsWindow.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-            this.BOMItemsWindow.Size = new System.Drawing.Size(217, 299);
-            this.BOMItemsWindow.TabIndex = 25;
-            // 
             // label7
             // 
             this.label7.AutoSize = true;
@@ -314,14 +304,44 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
             this.label8.TabIndex = 27;
             this.label8.Text = "Items to be added to BOM:";
             // 
+            // BOMItemsWindow
+            // 
+            this.BOMItemsWindow.Location = new System.Drawing.Point(588, 139);
+            this.BOMItemsWindow.Name = "BOMItemsWindow";
+            this.BOMItemsWindow.ReadOnly = true;
+            this.BOMItemsWindow.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.ForcedBoth;
+            this.BOMItemsWindow.Size = new System.Drawing.Size(414, 299);
+            this.BOMItemsWindow.TabIndex = 28;
+            this.BOMItemsWindow.Text = "";
+            // 
+            // WrongNamesBox
+            // 
+            this.WrongNamesBox.Location = new System.Drawing.Point(758, 42);
+            this.WrongNamesBox.Name = "WrongNamesBox";
+            this.WrongNamesBox.ReadOnly = true;
+            this.WrongNamesBox.Size = new System.Drawing.Size(244, 81);
+            this.WrongNamesBox.TabIndex = 29;
+            this.WrongNamesBox.Text = "";
+            // 
+            // label9
+            // 
+            this.label9.AutoSize = true;
+            this.label9.Location = new System.Drawing.Point(815, 13);
+            this.label9.Name = "label9";
+            this.label9.Size = new System.Drawing.Size(131, 15);
+            this.label9.TabIndex = 30;
+            this.label9.Text = "Incorrectly Named Files";
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(800, 450);
+            this.ClientSize = new System.Drawing.Size(1036, 450);
+            this.Controls.Add(this.label9);
+            this.Controls.Add(this.WrongNamesBox);
+            this.Controls.Add(this.BOMItemsWindow);
             this.Controls.Add(this.label8);
             this.Controls.Add(this.label7);
-            this.Controls.Add(this.BOMItemsWindow);
             this.Controls.Add(this.UpdateWindow);
             this.Controls.Add(this.FBPort);
             this.Controls.Add(this.FBServer);
@@ -379,9 +399,11 @@ namespace FishBowl_PDM_BOM_Import_Addin_Official_
         private System.Windows.Forms.Label FBPortLabel;
         private System.Windows.Forms.Label FBServerLabel;
         private System.Windows.Forms.TextBox UpdateWindow;
-        private System.Windows.Forms.TextBox BOMItemsWindow;
         private System.Windows.Forms.Label label7;
         private System.Windows.Forms.Label label8;
+        private System.Windows.Forms.RichTextBox BOMItemsWindow;
+        private System.Windows.Forms.RichTextBox WrongNamesBox;
+        private System.Windows.Forms.Label label9;
     }
 }
 
